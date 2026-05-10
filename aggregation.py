@@ -45,14 +45,11 @@ def aggregate(
     # STUDENT: Replace or extend the aggregation below.
     # ------------------------------------------------------------------
 
-    # Default: last real token of the final transformer layer.
-    layer = hidden_states[-1]          # (seq_len, hidden_dim)
-
-    # Find the index of the last real (non-padding) token.
-    real_positions = attention_mask.nonzero(as_tuple=False)  # (n_real, 1)
-    last_pos = int(real_positions[-1].item())                 # scalar index
-
-    feature = layer[last_pos]          # (hidden_dim,)
+    # Last real token of the final transformer layer.
+    layer = hidden_states[-1]                                 # (seq_len, hidden_dim)
+    real_positions = attention_mask.nonzero(as_tuple=False)   # (n_real, 1)
+    last_pos = int(real_positions[-1].item())
+    feature = layer[last_pos]                                  # (hidden_dim,)
 
     return feature
     # ------------------------------------------------------------------
@@ -85,8 +82,43 @@ def extract_geometric_features(
     # STUDENT: Replace or extend the geometric feature extraction below.
     # ------------------------------------------------------------------
 
-    # Placeholder: returns an empty tensor (no geometric features).
-    return torch.zeros(0)
+    # 10 hand-crafted features, all computed at the last real token:
+    #   1  — sequence length (count of real tokens)
+    #   4  — last-token L2 norms at layers {6, 12, 18, 24}
+    #   4  — cosine(h[k], h[k+1]) at last token for k ∈ {6, 12, 18, 22}
+    #   1  — cosine(h[0], h[24]) at last token (overall transformation)
+    real_positions = attention_mask.nonzero(as_tuple=False)
+    last_pos = int(real_positions[-1].item())
+    n_real = float(attention_mask.sum().item())
+
+    device = hidden_states.device
+    dtype = hidden_states.dtype
+    eps = 1e-8
+
+    def _cos(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+        return (a * b).sum() / (a.norm() * b.norm() + eps)
+
+    feats: list[torch.Tensor] = []
+
+    # 1. Sequence length (longer responses sometimes correlate with bullshit).
+    feats.append(torch.tensor([n_real], dtype=dtype, device=device))
+
+    # 2. Per-layer last-token norms (activation magnitude across depth).
+    for k in (6, 12, 18, 24):
+        feats.append(hidden_states[k][last_pos].norm().unsqueeze(0))
+
+    # 3. Inter-layer drift: cosine between consecutive layers' last tokens.
+    for k in (6, 12, 18, 22):
+        a = hidden_states[k][last_pos]
+        b = hidden_states[k + 1][last_pos]
+        feats.append(_cos(a, b).unsqueeze(0))
+
+    # 4. Total transformation: cosine between embedding and final layer.
+    a = hidden_states[0][last_pos]
+    b = hidden_states[24][last_pos]
+    feats.append(_cos(a, b).unsqueeze(0))
+
+    return torch.cat(feats, dim=0).float()  # (10,)
 
 
 def aggregation_and_feature_extraction(

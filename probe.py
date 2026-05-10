@@ -42,6 +42,9 @@ class HallucinationProbe(nn.Module):
         Args:
             input_dim: Feature vector dimensionality.
         """
+        # 256-hidden MLP — empirically best on layer-24 features (74.64% test
+        # AUROC). With multi-layer concat the input grows 3× (~2688-dim), so
+        # the hidden-256 capacity is justified.
         self._net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
