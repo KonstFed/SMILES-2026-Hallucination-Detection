@@ -58,6 +58,12 @@ class HallucinationProbe(nn.Module):
             nn.Linear(256, 1),
         )
 
+    # Bracket search rejected early stopping: test AUROC monotonically
+    # rose with more training (50 ep: 71.88 → 100 ep: 73.61 → 200 ep:
+    # 74.66). The train→100% AUROC isn't memorizing past real signal,
+    # it's just compressing it into tiny-N training data.
+    MLP_EPOCHS = 200
+
     def _train_mlp(self, X_scaled: np.ndarray, y: np.ndarray) -> None:
         torch.manual_seed(0)
         self._build_mlp(X_scaled.shape[1])
@@ -72,7 +78,7 @@ class HallucinationProbe(nn.Module):
         optimizer = torch.optim.Adam(self._mlp.parameters(), lr=1e-3)
 
         self._mlp.train()
-        for _ in range(200):
+        for _ in range(self.MLP_EPOCHS):
             optimizer.zero_grad()
             logits = self._mlp(X_t).squeeze(-1)
             loss = criterion(logits, y_t)
