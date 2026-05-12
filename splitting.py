@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 
 def split_data(
@@ -30,41 +30,33 @@ def split_data(
 ) -> list[tuple[np.ndarray, np.ndarray | None, np.ndarray]]:
     """Split dataset indices into train, validation, and test subsets.
 
-    The default strategy performs a single stratified random split preserving
-    the class ratio in each subset.
+    Reserves a fixed stratified test set (~15 %), then applies 5-fold
+    stratified CV to the remaining samples so model selection is less noisy.
 
     Args:
         y:            Label array of shape ``(N,)`` with values in ``{0, 1}``.
-                      Used for stratification.
-        df:           Optional full DataFrame (same row order as ``y``).
-                      Required for group-aware splits.
+        df:           Unused; kept for interface compatibility.
         test_size:    Fraction of samples reserved for the held-out test set.
-        val_size:     Fraction of samples reserved for validation.
-        random_state: Random seed for reproducible splits.
+        val_size:     Unused; fold size is determined by n_splits.
+        random_state: Random seed for reproducibility.
 
     Returns:
-        A list of ``(idx_train, idx_val, idx_test)`` tuples of integer index
-        arrays.  ``idx_val`` may be ``None``.
-
-    Student task:
-        Replace or extend the skeleton below.  The only contract is that the
-        function returns the list described above.
+        A list of 5 ``(idx_train, idx_val, idx_test)`` tuples.
     """
-
     idx = np.arange(len(y))
 
-    idx_train_val, idx_test = train_test_split(
+    idx_trainval, idx_test = train_test_split(
         idx,
         test_size=test_size,
         random_state=random_state,
         stratify=y,
     )
-    relative_val = val_size / (1.0 - test_size)
-    idx_train, idx_val = train_test_split(
-        idx_train_val,
-        test_size=relative_val,
-        random_state=random_state,
-        stratify=y[idx_train_val],
-    )
-    return [(idx_train, idx_val, idx_test)]
 
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+    splits = []
+    for rel_train, rel_val in kf.split(idx_trainval, y[idx_trainval]):
+        idx_train = idx_trainval[rel_train]
+        idx_val = idx_trainval[rel_val]
+        splits.append((idx_train, idx_val, idx_test))
+
+    return splits
