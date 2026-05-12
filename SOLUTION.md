@@ -3,6 +3,8 @@
 **Final 5-fold averaged metrics**: test accuracy **74.23%**, test AUROC **74.66%**.
 Majority-class baseline = 70.19%, so the probe sits **+4.04pt above baseline**.
 
+**Submitted predictions:** [`predictions.csv` on Google Drive](https://drive.google.com/file/d/1LTNHA5BRigi2AeN57hbWiL3E8TVEoBLI/view?usp=sharing)
+
 ## Reproducibility
 
 ```bash
