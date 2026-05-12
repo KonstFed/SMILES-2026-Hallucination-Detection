@@ -5,8 +5,7 @@ Outputs two concatenated feature blocks consumed by the multi-probe
 ensemble in ``probe.py``:
 
   * Block A (896-d) — last-token activation at layer 24. Strongest single
-    layer per the layer sweep; main signal source for the linear and MLP
-    sub-probes.
+    layer per the layer sweep.
 
   * Block C (13-d) — geometric signal:
       - 9 trajectory features (step norms, step cosines, straightness,
@@ -15,10 +14,13 @@ ensemble in ``probe.py``:
       - 3 response-token norm stats at layer 24 (mean / std / max)
     Standalone trajectory features showed only a 7pt train/test gap
     (vs 25pt for activation-MLP), so this block has a fundamentally
-    different failure mode and can contribute to ensemble diversity.
+    different failure mode.
 
 Block layout: ``X = [block_a (896) | block_c (13)]``. Probe slices on
 ``BLOCK_A_DIM`` and routes each block to its dedicated sub-probe.
+
+(Block B / mid-layer L12 was tried in Phase 2 — uniform-averaging it
+dragged AUROC down by 2.5pt; val-AUROC weighting also failed. Reverted.)
 
 The prompt/response boundary (needed for response-only stats) is found
 without changing ``solution.py`` by fingerprinting the ``<|im_start|>``

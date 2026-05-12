@@ -1,18 +1,19 @@
 """
-probe.py — Phase 1 ensemble probe (3 sub-probes).
+probe.py — Phase 1 ensemble probe (3 sub-probes, uniform weights).
 
 Routes the two feature blocks from ``aggregation.py`` to dedicated
-sub-probes, then averages their probabilities:
+sub-probes, then averages their probabilities (uniform 1/3 each):
 
-  * ``LDA-shrinkage`` on Block A (896-d) — calibrated linear, no memo
+  * ``LDA-shrinkage`` on Block A (L24, 896-d) — calibrated linear, no memo
   * ``MLP-256`` on Block A — non-linear, more AUROC, memorizes
   * ``LDA-shrinkage`` on Block C (13-d geometric) — different signal type
-    (standalone trajectory features had 7pt train/test gap vs 25pt for
-    activation-MLP, so its errors should be largely uncorrelated)
 
-Each block has its own ``StandardScaler`` so the geometric features (mixed
-scales) don't pollute the activation scaler. Threshold is tuned on
-validation for accuracy.
+Each block has its own ``StandardScaler`` so feature scales don't bleed
+between blocks. Threshold is tuned on validation for accuracy and the
+chosen value is printed each fold so it can be averaged and hardcoded
+into ``__init__`` (the final submission probe in ``solution.py`` calls
+``fit()`` only — never ``fit_hyperparameters()`` — so the hardcoded
+default is what predictions.csv actually uses).
 """
 
 from __future__ import annotations
@@ -43,6 +44,8 @@ class HallucinationProbe(nn.Module):
         )
         self._mlp: nn.Sequential | None = None
 
+        # TODO: replace with average of per-fold thresholds printed by
+        # fit_hyperparameters() once measured.
         self._threshold: float = 0.5
 
     def _split_blocks(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -89,8 +92,8 @@ class HallucinationProbe(nn.Module):
         X_c_scaled = self._scaler_c.fit_transform(X_c)
 
         self._lda_a.fit(X_a_scaled, y)
-        self._train_mlp(X_a_scaled, y)
         self._lda_c.fit(X_c_scaled, y)
+        self._train_mlp(X_a_scaled, y)
         return self
 
     def fit_hyperparameters(
@@ -110,6 +113,10 @@ class HallucinationProbe(nn.Module):
                 best_threshold = float(t)
 
         self._threshold = best_threshold
+        # Per-fold threshold logging — collect these across all folds and
+        # average them into the __init__ default to fix the eval/submission
+        # mismatch (solution.py never calls fit_hyperparameters).
+        print(f"  [probe] tuned threshold = {best_threshold:.4f}  (val acc = {best_acc:.4f})")
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
